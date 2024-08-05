@@ -489,7 +489,14 @@ def turn_tour(best_tour,points_r):
         pt.append(new_e)
     return pt
 
-def  SRC_LKH_main(fileName,must_per,n):
+def without_SPR(subsets,paruto_list,gen_points,types):
+    for gen_point in gen_points:
+        gen_point_type = get_gen_point_type(gen_point,types)
+        index = subsets.index(gen_point_type)
+        paruto_list[index].append(gen_point)
+    return paruto_list
+
+def  SRC_LKH_without_SPR(fileName,must_per,n):
     """
     :param fileName:    Name of the data set
     :param must_per:    |M|=must_per*(Number of nodes in data set)
@@ -536,17 +543,19 @@ def  SRC_LKH_main(fileName,must_per,n):
     for i in range(len(subsets)):
         paruto_list.append([])
     """
-    The subset of each cluster is computed and stored
+    Skip the subset process, you skip the subset cost process, 
+    and you just need to calculate the cost of the cluster.
+    But you can still calculate the cost of the cluster.
     """
-    paruto_list = create_paruto_list(subsets,paruto_list,gen_points,types,neighbors)
+    paruto_list = without_SPR(subsets,paruto_list,gen_points,types)
 
     """
-    Compute the cost of a subset of length one
+    Compute the cost of a clusters of length one
     """
     paruto_leading_edge,paruto_leading_dis = get_leading_edge(paruto_list,C,must_points,points)
 
     """
-    Calculate the cost of subsets of length greater than one
+    Calculate the cost of  clusters of length greater than one
     """
     paruto_leading_edge_2,paruto_leading_dis_2 = get_leading_edge_2(paruto_list,C,must_points,points)
 
@@ -653,7 +662,12 @@ if __name__ == '__main__':
     percent = 0.4               #|M|=percent*(Number of nodes in data set fileName).M stands for mandatory node set.
     semantics = 5               #There are 5 semantics in the data set
 
-    SRC_LKH_main(fileName,percent,semantics)
+    """
+    Skip the subset process, you skip the subset cost process, 
+    and you just need to calculate the cost of the cluster.
+    The remainder is consistent with SRC-LKH.
+    """
+    SRC_LKH_without_SPR(fileName,percent,semantics)
 
 
 

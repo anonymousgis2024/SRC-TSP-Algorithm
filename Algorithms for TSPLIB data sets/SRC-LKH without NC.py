@@ -489,7 +489,16 @@ def turn_tour(best_tour,points_r):
         pt.append(new_e)
     return pt
 
-def  SRC_LKH_main(fileName,must_per,n):
+def without_NC(types):
+    gen_points = []
+    for type in types:
+        for p in type:
+            gen_point = []
+            gen_point.append(p)
+            gen_points.append(gen_point)
+    return gen_points
+
+def  SRC_LKH_without_NC(fileName,must_per,n):
     """
     :param fileName:    Name of the data set
     :param must_per:    |M|=must_per*(Number of nodes in data set)
@@ -521,9 +530,9 @@ def  SRC_LKH_main(fileName,must_per,n):
     neighbors = sort_by_dis(neighbors,C)
 
     """
-    Clustering of adjacent and semantically different nodes into clusters.
+    Use a function without aggregation
     """
-    gen_points = get_gen_points(neighbors,types)
+    gen_points = without_NC(types)
 
     """
     Analyze the obtained clusters and further extract high-quality subsets.
@@ -653,7 +662,11 @@ if __name__ == '__main__':
     percent = 0.4               #|M|=percent*(Number of nodes in data set fileName).M stands for mandatory node set.
     semantics = 5               #There are 5 semantics in the data set
 
-    SRC_LKH_main(fileName,percent,semantics)
+    """
+    The aggregation function is replaced with a non-aggregation function, 
+    and the remainder is consistent with SRC-LKH.
+    """
+    SRC_LKH_without_NC(fileName, percent, semantics)
 
 
 

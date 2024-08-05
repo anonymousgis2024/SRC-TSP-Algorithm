@@ -1,24 +1,24 @@
 import itertools
+import math
 import copy
 import random
-import time
 from itertools import combinations
 import elkai
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.spatial import Voronoi
+import scipy.spatial as ssp
 
-#画点
 def plt_points(points):
-    plt.rcParams['savefig.dpi'] = 200  # 图片像素
-    plt.rcParams['figure.dpi'] = 200  # 分辨率
+    plt.rcParams['savefig.dpi'] = 200
+    plt.rcParams['figure.dpi'] = 200
     for i,(x,y) in enumerate(points):
         plt.scatter(x, y, color='r', s=10)
         plt.text(x, y, str(i), fontsize=6, color='b')
 
 def draw_points_type(points,types):
-    plt.rcParams['savefig.dpi'] = 200  # 图片像素
-    plt.rcParams['figure.dpi'] = 200  # 分辨率
+    plt.rcParams['savefig.dpi'] = 200
+    plt.rcParams['figure.dpi'] = 200
     n = len(types)
     for i, (x, y) in enumerate(points):
         if i in types[0]:
@@ -43,52 +43,53 @@ def draw_points_type(points,types):
         else:
             plt.scatter(x, y, color='k', s=3)
 
-#画边
+
 def plt_edges(edges_touple, points, color):
-    plt.rcParams['savefig.dpi'] = 300  # 图片像素
-    plt.rcParams['figure.dpi'] = 300  # 分辨率
-    #绘制连线
+    plt.rcParams['savefig.dpi'] = 300
+    plt.rcParams['figure.dpi'] = 300
     for p1,p2 in edges_touple:
         plt.plot([points[p1][0],points[p2][0]], [points[p1][1],points[p2][1]], color=color, linewidth=1)
 
-#读取数据集
 def readDataFile_list(fileName):
     dataList = list()
-    must_points = list()
-    types = list()
-    type_n = list()
-    with open(r"../dataset/real_data/"+fileName,'r') as fr:
-        fr.readline()#跳过标题行
+    with open(r"../dataset/TSPLIB/"+fileName,'r') as fr:
+        fr.readline()
         for line in fr:
             strs = line.strip().split(",")
             dataList.append((float(strs[1]),float(strs[2])))
-            if int(strs[3])==0:
-                must_points.append(int(strs[0]))
-            else:
-                if int(strs[3]) in type_n:
-                    types[int(strs[3])-1].append(int(strs[0]))
-                else:
-                    type_n.append(int(strs[3]))
-                    type = list()
-                    type.append(int(strs[0]))
-                    types.append(type)
-    return dataList,must_points,types
+    return dataList
 
-def insert(dis_i,point,dis):
-    if len(dis_i)<=1:
-        dis_i.append([point,round(dis,2)])
+def distance(points,i,j):
+    if i!=j:
+        dx = points[i][0]-points[j][0]
+        dy = points[i][1]-points[j][1]
+        dis = math.sqrt((dx*dx)+(dy*dy))
+        return dis
     else:
-        for flag in range(1,len(dis_i)):
-            # print(f"dis_i={dis_i}")
-            # print(f"dis_i[flag]={dis_i[flag]}")
-            dis_compare = dis_i[flag][1]
-            if dis<dis_compare:
-                t = copy.deepcopy(dis_i[flag:])
-                dis_i = dis_i[:flag]+[[point, round(dis,2)]]+t
-                break
-            elif flag==len(dis_i)-1:
-                dis_i.append([point,round(dis,2)])
-    return dis_i
+        return float('inf')
+
+def count_C_m(points,p_n):
+    C = []
+    for i in range(p_n):
+        c_element = []
+        for j in range(p_n):
+            a = distance(points,i,j)
+            c_element.append(round(a,2))
+        C.append(c_element)
+    return C
+
+def types_m_init(n, left_point_num):
+    types = []
+    ave = int(len(left_point_num)/n)
+    t = copy.deepcopy(left_point_num)
+    for i in range(n):
+        if i == n-1:
+            types.append(t)
+        else:
+            random_sample = list(np.random.choice(t, ave, replace=False))
+            types.append(random_sample)
+            t = list(set(t)-set(random_sample))
+    return types
 
 def get_point_type(types,p):
     for i in range(len(types)):
@@ -103,7 +104,6 @@ def get_stop_gen_flag(types):
         return 1
 
 def get_unable_flag(p,free_types):
-    #如果p是可以加入的点，则返回0，否则返回1
     for type in free_types:
         if p in type:
             return 0
@@ -135,7 +135,6 @@ def get_gen_points(neighbors,types):
         while start_flag<len(gen_point):
             n = neighbors[gen_point[start_flag]]
             for p in n:
-                #找到了某个点的全部邻接点，看看能否构成一个簇
                 unable_flag = get_unable_flag(p,free_types)
                 if unable_flag!=1:
                     p_type = get_point_type(types,p)
@@ -192,7 +191,6 @@ def get_fit_points(type,gen_point,types,neighbors):
     for i in type:
         index = t.index(i)
         points.append(gen_point[index])
-    #需要一段代码来判断这些找出来的点是否相邻
     fit_points = []
     p = points[0]
     test_points = [p]
@@ -209,24 +207,21 @@ def get_fit_points(type,gen_point,types,neighbors):
     return fit_points
 
 def create_paruto_list(subsets,paruto_list,gen_points,types,neighbors):
-    #已知一个簇，将这个簇分解为
-    """
-    :param subsets:     这是一个列表，其中记录了集合[[0],[1],``````[1,2,3,4,5]]
-    :param paruto_list: 这是一个列表，用于记录下前沿，与上一个参数对应，[1]这个类对应下标1，paruto[1]中就记录1这个type种最优秀的点
-    :param gen_points:  所有的簇
-    :param types:       所有点的种类
-    :return:            将paruto_list返回
-    """
     for gen_point in gen_points:
         gen_point_type = get_gen_point_type(gen_point,types)
         gen_point_types = generate_subsets(set(gen_point_type))
-        #取出一个簇，计算这个簇的种类，并计算这个簇种类的子集————计算这个簇可以拆分成什么种类的子集
         for type in gen_point_types:
-            #取出其中一个种类，找对应的点
             points = get_fit_points(type,gen_point,types,neighbors)
             index = subsets.index(type)
             if (len(points)>0) and (points not in paruto_list[index]):
                 paruto_list[index].append(points)
+    return paruto_list
+
+def create_paruto_list2(subsets,paruto_list,gen_points,types):
+    for gen_point in gen_points:
+        gen_point_type = get_gen_point_type(gen_point,types)
+        index = subsets.index(gen_point_type)
+        paruto_list[index].append(gen_point)
     return paruto_list
 
 def get_near_point_by_point(f_point,C,must_points):
@@ -237,48 +232,33 @@ def get_near_point_by_point(f_point,C,must_points):
     return special_p[:2]
 
 def get_near_point_by_point_2(f_point,C,must_points):
-    if len(must_points)==1:
-        special_p = list()
-        special_p.append(must_points[0])
-        return special_p
-    else:
-        dis_list = []
-        for m_p in must_points:
-            dis_list.append(C[f_point][m_p])
-        special_p = [x for _, x in sorted(zip(dis_list,must_points))]
-        return special_p[:3]
+    dis_list = []
+    for m_p in must_points:
+        dis_list.append(C[f_point][m_p])
+    special_p = [x for _, x in sorted(zip(dis_list,must_points))]
+    return special_p[:3]
 
 def get_dis_to_tour(gen_point,C,must_points,points):
-    """
-    :param gen_point:           这是一个或几个点构成的簇，list类型
-    :param C:                   距离矩阵
-    :return:                    返回的是簇到初始路径的距离
-    """
-    p = gen_point[0]        #一个点作为一个簇的情况
+    p = gen_point[0]
+    d = []
     dis = 0
     special_points = get_near_point_by_point_2(p,C,must_points)
-    if len(special_points)==1:
-        d_0 = C[p][special_points[0]]
-    else:
-        d_0 = C[p][special_points[0]]
-        d_1 = C[p][special_points[1]]
-        d_2 = C[p][special_points[2]]
-        d_01 = d_0+d_1-C[special_points[0]][special_points[1]]
-        d_12 = d_1+d_2-C[special_points[1]][special_points[2]]
-        d_list = [d_0,d_1,d_01,d_2,d_12]
-        d_list.sort()
-        for i in d_list:
-            if i>=0:
-                return i
-        return dis
+    d_0 = C[p][special_points[0]]
+    d_1 = C[p][special_points[1]]
+    d_2 = C[p][special_points[2]]
+    d_01 = d_0+d_1-C[special_points[0]][special_points[1]]
+    d_02 = d_0+d_2-C[special_points[0]][special_points[2]]
+    d_12 = d_1+d_2-C[special_points[1]][special_points[2]]
+    d_list = [d_0,d_1,d_01,d_2,d_12]
+    d_list.sort()
+    for i in d_list:
+        if i>=0:
+            return i
+    return dis
 
 def get_dis_to_tour_2(gen_point,C,must_points,points):
-    """
-    :param gen_point:           这是一个或几个点构成的簇，list类型
-    :param C:                   距离矩阵
-    :return:                    返回的是簇到初始路径的距离
-    """
-    p = gen_point[0]        #一个点作为一个簇的情况
+    p = gen_point[0]
+    d = []
     dis = 0
     special_points = get_near_point_by_point_2(p,C,must_points)
     d_0 = C[p][special_points[0]]
@@ -295,6 +275,8 @@ def get_dis_p(p,tree_p,C):
     dis = []
     for t_p in tree_p:
         dis.append(C[p][t_p])
+    min_dis = min(dis)
+    index = dis.index(min_dis)
     return min(dis)
 
 def get_minmal_tree_dis(gen_point,C,must_points):
@@ -352,8 +334,6 @@ def get_leading_edge(paruto_list,C,must_points,points):
             element_test_len = len(paruto_list[i][0])
             if element_test_len==1:
                 for gen_point in paruto_list[i]:
-                    # print(gen_point)
-                    #需要计算这个簇到路径的距离
                     gen_point_dis_to_tour = get_dis_to_tour(gen_point,C,must_points,points)
                     paruto_leading_edge[i].append(gen_point)
                     paruto_leading_dis[i].append(gen_point_dis_to_tour)
@@ -382,8 +362,6 @@ def get_leading_edge_2(paruto_list,C,must_points,points):
             element_test_len = len(paruto_list[i][0])
             if element_test_len==1:
                 for gen_point in paruto_list[i]:
-                    # print(gen_point)
-                    #需要计算这个簇到路径的距离
                     gen_point_dis_to_tour = get_dis_to_tour_2(gen_point,C,must_points,points)
                     paruto_leading_edge[i].append(gen_point)
                     paruto_leading_dis[i].append(gen_point_dis_to_tour)
@@ -435,7 +413,7 @@ def split_list(original_list,i):
                         result.append(sort_test)
     return result
 
-def find_add_method(subsets,paruto_leading_edge,paruto_leading_dis):
+def find_add_method(subsets,paruto_leading_edge,paruto_leading_dis,types):
     need_types = subsets[-1]
     methods = []
     for i in range(1, len(need_types) + 1):
@@ -464,24 +442,31 @@ def find_add_method(subsets,paruto_leading_edge,paruto_leading_dis):
     add_m = [x for _, x in sorted(zip(add_dis, add_method))]
     return add_m,add_p
 
-def LKH(city_num,od_dis_mx):
-    distance = np.zeros((len(city_num),len(city_num)))
-    for i in range(len(city_num)):
-        for j in range(len(city_num)):
-            distance[i][j] = od_dis_mx[city_num[i]][city_num[j]]
-    # 计算所得方案的线路总长度
+def LKH(city_condition):
+    def genDistanceMat(x, y):
+        X = np.array([x, y])
+        distMat = ssp.distance.pdist(X.T)
+        distMat = ssp.distance.squareform(distMat)
+        return distMat
+    x, y = city_condition[:, 0], city_condition[:, 1]
+    distance = genDistanceMat(x, y)
     def cal_fitness(sol):
         tot_len = np.sum(distance[sol[:-1], sol[1:len(sol)]])
         return tot_len
-
-    # sol = elkai.solve_int_matrix(distance)
-    sol = elkai.solve_float_matrix(distance,runs=10)#允许浮点距离
+    sol = elkai.solve_int_matrix(distance)
+    # sol = elkai.solve_float_matrix(distance,runs=10)
     sol.append(0)
-    '''这个函数计算出的是有回路的TSP问题，但返回的解方案sol没有给出完整解方案(少一个终点0),故我们在代码中在解方案最末尾加上了编号0'''
-
     sumdis = cal_fitness(sol)
-    # print("最优解总长度:", sumdis)
     return sol, sumdis
+
+def count_len(tour,C):
+    l = 0
+    for edge in tour:
+        f = edge[0]
+        t = edge[1]
+        add = C[f][t]
+        l +=add
+    return l
 
 def turn_points(best_points,points):
     r = []
@@ -500,67 +485,54 @@ def turn_tour(best_tour,points_r):
     pt = []
     t = copy.deepcopy(best_tour)
     for e in t:
-        new_e = [points_r[e[0]],points_r[e[1]]]
+        new_e = tuple([points_r[e[0]],points_r[e[1]]])
         pt.append(new_e)
     return pt
 
-def read_dis_mx(file,dis_mx):
-    with open(r"../dataset/real_data/"+file,'r') as fr:
-        fr.readline()
-        for line in fr:
-            line = line.strip()
-            atrs = line.split(",")
-            o1,d1,dis = int(atrs[0]),int(atrs[1]),float(atrs[2])
-            dis_mx[o1-1][d1-1]=dis
-    return dis_mx
-
-def SRC_LKH_main(file1,file2):
+def  SRC_LKH_without_Pert(fileName,must_per,n):
     """
-    :param file1: This file records the coordinate information and semantics of each point
-    :param file2: This file records the distance of the road network between any two points
+    :param fileName:    Name of the data set
+    :param must_per:    |M|=must_per*(Number of nodes in data set)
+    :param n:           Semantic category
     """
-
-    """
-    By reading file 1, the location information and semantic attributes of the node are obtained
-    """
-    points,must_points,init_types = readDataFile_list(file1)
-    types = copy.deepcopy(init_types)
-    n = len(types)
+    points = readDataFile_list(fileName)    #Read data set
     neighbors = []
     for i in range(len(points)):
         neighbors.append([])
-    vor = Voronoi(np.array(points))     #All nodes in the data set are analyzed using the Tyson polygon.
+    vor = Voronoi(np.array(points))         #All nodes in the data set are analyzed using the Tyson polygon.
     p_n = len(points)
+    C = count_C_m(points,p_n)               #The distance matrix is calculated using the horizontal and vertical coordinates of the nodes
+
+    point_num = [i for i in range(p_n)]
+    must_p_n = int(must_per*p_n)
+    np.random.seed(0)
+    must_points = list(np.random.choice(point_num, must_p_n, replace=False))    #Structural set M
+    left_points= list(set(point_num)-set(must_points))                          #Remaining node
+    types = types_m_init(n, left_points)            #The set S is divided into n classes according to semantics
 
     """
-    By reading file2, the road network distance between any two points is obtained, 
-    and the distance matrix is obtained
+    Using the Tyson polygon to judge whether any two semantic nodes are adjacent, 
+    the adjacency relation table is further obtained.
     """
-    C = np.zeros((p_n,p_n))
-    C = read_dis_mx(file2,C)
-
-    start_time = time.time()
-    """
-   Using the Tyson polygon to judge whether any two semantic nodes are adjacent, 
-   the adjacency relation table is further obtained.
-   """
     for c1, c2 in vor.ridge_points:
         if (c1 not in must_points) and (c2 not in must_points):
             neighbors[c1].append(c2)
             neighbors[c2].append(c1)
     neighbors = sort_by_dis(neighbors,C)
+
     """
     Clustering of adjacent and semantically different nodes into clusters.
     """
     gen_points = get_gen_points(neighbors,types)
+
     """
     Analyze the obtained clusters and further extract high-quality subsets.
     """
     s = set()
     for i in range(len(types)):
         s.add(i)
-    subsets = generate_subsets(s)   #The results of semantic constraint partitioning are discussed.
-    paruto_list = list()
+    subsets = generate_subsets(s)       #The results of semantic constraint partitioning are discussed
+    paruto_list = []
     for i in range(len(subsets)):
         paruto_list.append([])
     """
@@ -582,13 +554,12 @@ def SRC_LKH_main(file1,file2):
     The corresponding subset is found according to the semantic combination mode, 
     and the cost of the subset is added as the cost of the corresponding combination mode
     """
-    add_methods,add_points = find_add_method(subsets,paruto_leading_edge,paruto_leading_dis)
+    add_methods,add_points = find_add_method(subsets,paruto_leading_edge,paruto_leading_dis,types)
+
     best_tour = []
     test_points = []
-    tpn = []
     for j in must_points:
         test_points.append(points[j])
-        tpn.append(j)
     M = copy.deepcopy(test_points)
 
     """
@@ -596,95 +567,49 @@ def SRC_LKH_main(file1,file2):
     """
     for k in add_points[0]:
         test_points.append(points[k])
-        tpn.append(k)
-    sol, sumdis = LKH(tpn,C)
-
+    sol, sumdis = LKH(np.array(test_points))
     for i in range(1, len(sol)):
-        best_tour.append([sol[i-1], sol[i]])
-
+        best_tour.append([sol[i - 1], sol[i]])
     best_fitness = copy.deepcopy(sumdis)
     best_add = copy.deepcopy(add_points[0])
     best_points = copy.deepcopy(test_points)
 
-    """
-    Construct a set of candidates for perturbation.
-    """
-    candidates = []
-    for x in range(n):
-        candidate = []
-        if len(paruto_leading_edge_2[x])>=2:
-            candidate.append(paruto_leading_edge_2[x][0][0])
-            candidate.append(paruto_leading_edge_2[x][1][0])
-        elif len(paruto_leading_edge_2[x])==1:
-            candidate.append(paruto_leading_edge_2[x][0][0])
-        if len(paruto_leading_edge[x])>=3:
-            candidate.append(paruto_leading_edge[x][1][0])
-            candidate.append(paruto_leading_edge[x][2][0])
-            candidate.append(paruto_leading_edge[x][0][0])
-        elif len(paruto_leading_edge[x])==2:
-            candidate.append(paruto_leading_edge[x][0][0])
-            candidate.append(paruto_leading_edge[x][1][0])
-        elif len(paruto_leading_edge[x])==1:
-            candidate.append(paruto_leading_edge[x][0][0])
-        candidate = list(set(candidate))
-        random.shuffle(candidate)
-        candidates.append(candidate)
-    l = []
-    for i in range(n):
-        l.append(i)
-        random.shuffle(l)
 
     """
-    The initial path is optimized by perturbation
+    Draw the final path of the algorithm
     """
-    for i in l:
-        for j in range(len(candidates[i])):
-            t = copy.deepcopy(best_add)
-            t[i] = candidates[i][j]
-            S = copy.deepcopy(M)
-            S_num = copy.deepcopy(must_points)
-            for p in t:
-                S.append(points[p])
-                S_num.append(p)
-            sol, sumdis = LKH(S_num,C)
-            tour = []
-            for e in range(1, len(sol)):
-                tour.append([sol[e - 1], sol[e]])
-            if sumdis<best_fitness:
-                best_fitness=copy.deepcopy(sumdis)
-                best_add = copy.deepcopy(t)
-                best_points = copy.deepcopy(S)
-                best_tour = copy.deepcopy(tour)
-            else:
-                continue
-    end_time = time.time()
-    print(f"Time spent = {end_time-start_time}s")
-    print(f"Select nodes with semantics = {best_add}")
-    draw_points_type(np.array(points), init_types)
+    plt_points(np.array(best_points))
     plt_edges(best_tour, np.array(best_points), color='k')
+    bfc = best_fitness
+    plt.title(int(bfc))
+    plt.show()
     points_r = turn_points(best_points, points)
     pt = turn_tour(best_tour, points_r)
-    print(f"length of path = {best_fitness}")
+    print(f"Select nodes with semantics = {best_add}")
+    print(f"length of path = {bfc}")
     print(f"path{pt}")
-    plt.title(best_fitness)
-    plt.show()
-
 
 if __name__ == '__main__':
-    """This file records the coordinate information and semantics of each point"""
-    Coordinate_And_Semantics = "real_data.csv"
-
-
-    """This file records the distance of the road network between any two points"""
-    Distance_Of_Road_Network = "od_distance_metrix.csv"
-
-
-    SRC_LKH_main(Coordinate_And_Semantics,Distance_Of_Road_Network)
     """
-    说明，计算的是路网距离，但是画图最后还是画的欧式距离。
-    代码也按照人造和真实分两文件夹
+    You can replace fileName with any of the data sets in the following list.
+    Specifically, you can select any dataset in the dataset/TSPLIB folder
+    ["pr76.csv","kroA100.csv","kroC100.csv","pr124.csv","pr136.csv","ch150.csv","kroA150.csv"]
+    This file records the coordinate information of each point.
     """
+    fileName = "kroA150.csv"
 
+
+    """
+    You can replace percent with any of the values in the list below.
+    [0.2,0.3,0.4,0.5,0.6,0.7,0.8]
+    """
+    percent = 0.4               #|M|=percent*(Number of nodes in data set fileName).M stands for mandatory node set.
+    semantics = 5               #There are 5 semantics in the data set
+    """
+    The process of constructing variant candidate sets and path optimization are removed.
+    The remainder is consistent with SRC-LKH.
+    """
+    SRC_LKH_without_Pert(fileName,percent,semantics)
 
 
 

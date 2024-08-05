@@ -1,13 +1,12 @@
 import itertools
-import math
 import copy
 import random
+import time
 from itertools import combinations
 import elkai
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.spatial import Voronoi
-import scipy.spatial as ssp
 
 def plt_points(points):
     plt.rcParams['savefig.dpi'] = 200
@@ -43,7 +42,6 @@ def draw_points_type(points,types):
         else:
             plt.scatter(x, y, color='k', s=3)
 
-
 def plt_edges(edges_touple, points, color):
     plt.rcParams['savefig.dpi'] = 300
     plt.rcParams['figure.dpi'] = 300
@@ -52,44 +50,39 @@ def plt_edges(edges_touple, points, color):
 
 def readDataFile_list(fileName):
     dataList = list()
-    with open(r"../dataset/TSPLIB/"+fileName,'r') as fr:
+    must_points = list()
+    types = list()
+    type_n = list()
+    with open(r"../dataset/real_data/"+fileName,'r') as fr:
         fr.readline()
         for line in fr:
             strs = line.strip().split(",")
             dataList.append((float(strs[1]),float(strs[2])))
-    return dataList
+            if int(strs[3])==0:
+                must_points.append(int(strs[0]))
+            else:
+                if int(strs[3]) in type_n:
+                    types[int(strs[3])-1].append(int(strs[0]))
+                else:
+                    type_n.append(int(strs[3]))
+                    type = list()
+                    type.append(int(strs[0]))
+                    types.append(type)
+    return dataList,must_points,types
 
-def distance(points,i,j):
-    if i!=j:
-        dx = points[i][0]-points[j][0]
-        dy = points[i][1]-points[j][1]
-        dis = math.sqrt((dx*dx)+(dy*dy))
-        return dis
+def insert(dis_i,point,dis):
+    if len(dis_i)<=1:
+        dis_i.append([point,round(dis,2)])
     else:
-        return float('inf')
-
-def count_C_m(points,p_n):
-    C = []
-    for i in range(p_n):
-        c_element = []
-        for j in range(p_n):
-            a = distance(points,i,j)
-            c_element.append(round(a,2))
-        C.append(c_element)
-    return C
-
-def types_m_init(n, left_point_num):
-    types = []
-    ave = int(len(left_point_num)/n)
-    t = copy.deepcopy(left_point_num)
-    for i in range(n):
-        if i == n-1:
-            types.append(t)
-        else:
-            random_sample = list(np.random.choice(t, ave, replace=False))
-            types.append(random_sample)
-            t = list(set(t)-set(random_sample))
-    return types
+        for flag in range(1,len(dis_i)):
+            dis_compare = dis_i[flag][1]
+            if dis<dis_compare:
+                t = copy.deepcopy(dis_i[flag:])
+                dis_i = dis_i[:flag]+[[point, round(dis,2)]]+t
+                break
+            elif flag==len(dis_i)-1:
+                dis_i.append([point,round(dis,2)])
+    return dis_i
 
 def get_point_type(types,p):
     for i in range(len(types)):
@@ -217,13 +210,6 @@ def create_paruto_list(subsets,paruto_list,gen_points,types,neighbors):
                 paruto_list[index].append(points)
     return paruto_list
 
-def create_paruto_list2(subsets,paruto_list,gen_points,types):
-    for gen_point in gen_points:
-        gen_point_type = get_gen_point_type(gen_point,types)
-        index = subsets.index(gen_point_type)
-        paruto_list[index].append(gen_point)
-    return paruto_list
-
 def get_near_point_by_point(f_point,C,must_points):
     dis_list = []
     for m_p in must_points:
@@ -232,33 +218,39 @@ def get_near_point_by_point(f_point,C,must_points):
     return special_p[:2]
 
 def get_near_point_by_point_2(f_point,C,must_points):
-    dis_list = []
-    for m_p in must_points:
-        dis_list.append(C[f_point][m_p])
-    special_p = [x for _, x in sorted(zip(dis_list,must_points))]
-    return special_p[:3]
+    if len(must_points)==1:
+        special_p = list()
+        special_p.append(must_points[0])
+        return special_p
+    else:
+        dis_list = []
+        for m_p in must_points:
+            dis_list.append(C[f_point][m_p])
+        special_p = [x for _, x in sorted(zip(dis_list,must_points))]
+        return special_p[:3]
 
 def get_dis_to_tour(gen_point,C,must_points,points):
     p = gen_point[0]
-    d = []
     dis = 0
     special_points = get_near_point_by_point_2(p,C,must_points)
-    d_0 = C[p][special_points[0]]
-    d_1 = C[p][special_points[1]]
-    d_2 = C[p][special_points[2]]
-    d_01 = d_0+d_1-C[special_points[0]][special_points[1]]
-    d_02 = d_0+d_2-C[special_points[0]][special_points[2]]
-    d_12 = d_1+d_2-C[special_points[1]][special_points[2]]
-    d_list = [d_0,d_1,d_01,d_2,d_12]
-    d_list.sort()
-    for i in d_list:
-        if i>=0:
-            return i
-    return dis
+    if len(special_points)==1:
+        d_0 = C[p][special_points[0]]
+        return d_0
+    else:
+        d_0 = C[p][special_points[0]]
+        d_1 = C[p][special_points[1]]
+        d_2 = C[p][special_points[2]]
+        d_01 = d_0+d_1-C[special_points[0]][special_points[1]]
+        d_12 = d_1+d_2-C[special_points[1]][special_points[2]]
+        d_list = [d_0,d_1,d_01,d_2,d_12]
+        d_list.sort()
+        for i in d_list:
+            if i>=0:
+                return i
+        return dis
 
 def get_dis_to_tour_2(gen_point,C,must_points,points):
     p = gen_point[0]
-    d = []
     dis = 0
     special_points = get_near_point_by_point_2(p,C,must_points)
     d_0 = C[p][special_points[0]]
@@ -275,8 +267,6 @@ def get_dis_p(p,tree_p,C):
     dis = []
     for t_p in tree_p:
         dis.append(C[p][t_p])
-    min_dis = min(dis)
-    index = dis.index(min_dis)
     return min(dis)
 
 def get_minmal_tree_dis(gen_point,C,must_points):
@@ -413,7 +403,7 @@ def split_list(original_list,i):
                         result.append(sort_test)
     return result
 
-def find_add_method(subsets,paruto_leading_edge,paruto_leading_dis,types):
+def find_add_method(subsets,paruto_leading_edge,paruto_leading_dis):
     need_types = subsets[-1]
     methods = []
     for i in range(1, len(need_types) + 1):
@@ -442,31 +432,19 @@ def find_add_method(subsets,paruto_leading_edge,paruto_leading_dis,types):
     add_m = [x for _, x in sorted(zip(add_dis, add_method))]
     return add_m,add_p
 
-def LKH(city_condition):
-    def genDistanceMat(x, y):
-        X = np.array([x, y])
-        distMat = ssp.distance.pdist(X.T)
-        distMat = ssp.distance.squareform(distMat)
-        return distMat
-    x, y = city_condition[:, 0], city_condition[:, 1]
-    distance = genDistanceMat(x, y)
+def LKH(city_num,od_dis_mx):
+    distance = np.zeros((len(city_num),len(city_num)))
+    for i in range(len(city_num)):
+        for j in range(len(city_num)):
+            distance[i][j] = od_dis_mx[city_num[i]][city_num[j]]
     def cal_fitness(sol):
         tot_len = np.sum(distance[sol[:-1], sol[1:len(sol)]])
         return tot_len
-    sol = elkai.solve_int_matrix(distance)
-    # sol = elkai.solve_float_matrix(distance,runs=10)
+    # sol = elkai.solve_int_matrix(distance)
+    sol = elkai.solve_float_matrix(distance,runs=10)
     sol.append(0)
     sumdis = cal_fitness(sol)
     return sol, sumdis
-
-def count_len(tour,C):
-    l = 0
-    for edge in tour:
-        f = edge[0]
-        t = edge[1]
-        add = C[f][t]
-        l +=add
-    return l
 
 def turn_points(best_points,points):
     r = []
@@ -485,31 +463,46 @@ def turn_tour(best_tour,points_r):
     pt = []
     t = copy.deepcopy(best_tour)
     for e in t:
-        new_e = tuple([points_r[e[0]],points_r[e[1]]])
+        new_e = [points_r[e[0]],points_r[e[1]]]
         pt.append(new_e)
     return pt
 
-def  SRC_LKH_main(fileName,must_per,n):
+def read_dis_mx(file,dis_mx):
+    with open(r"../dataset/real_data/"+file,'r') as fr:
+        fr.readline()
+        for line in fr:
+            line = line.strip()
+            atrs = line.split(",")
+            o1,d1,dis = int(atrs[0]),int(atrs[1]),float(atrs[2])
+            dis_mx[o1-1][d1-1]=dis
+    return dis_mx
+
+def SRC_LKH_main_scen_1(file1,file2):
     """
-    :param fileName:    Name of the data set
-    :param must_per:    |M|=must_per*(Number of nodes in data set)
-    :param n:           Semantic category
+    :param file1: This file records the coordinate information and semantics of each point
+    :param file2: This file records the distance of the road network between any two points
     """
-    points = readDataFile_list(fileName)    #Read data set
+
+    """
+    By reading file 1, the location information and semantic attributes of the node are obtained
+    """
+    points,must_points,init_types = readDataFile_list(file1)
+    types = copy.deepcopy(init_types)
+    n = len(types)
     neighbors = []
     for i in range(len(points)):
         neighbors.append([])
-    vor = Voronoi(np.array(points))         #All nodes in the data set are analyzed using the Tyson polygon.
+    vor = Voronoi(np.array(points))     #All nodes in the data set are analyzed using the Tyson polygon.
     p_n = len(points)
-    C = count_C_m(points,p_n)               #The distance matrix is calculated using the horizontal and vertical coordinates of the nodes
 
-    point_num = [i for i in range(p_n)]
-    must_p_n = int(must_per*p_n)
-    np.random.seed(0)
-    must_points = list(np.random.choice(point_num, must_p_n, replace=False))    #Structural set M
-    left_points= list(set(point_num)-set(must_points))                          #Remaining node
-    types = types_m_init(n, left_points)            #The set S is divided into n classes according to semantics
+    """
+    By reading file2, the road network distance between any two points is obtained, 
+    and the distance matrix is obtained
+    """
+    C = np.zeros((p_n,p_n))
+    C = read_dis_mx(file2,C)
 
+    start_time = time.time()
     """
     Using the Tyson polygon to judge whether any two semantic nodes are adjacent, 
     the adjacency relation table is further obtained.
@@ -519,20 +512,18 @@ def  SRC_LKH_main(fileName,must_per,n):
             neighbors[c1].append(c2)
             neighbors[c2].append(c1)
     neighbors = sort_by_dis(neighbors,C)
-
     """
     Clustering of adjacent and semantically different nodes into clusters.
     """
     gen_points = get_gen_points(neighbors,types)
-
     """
     Analyze the obtained clusters and further extract high-quality subsets.
     """
     s = set()
     for i in range(len(types)):
         s.add(i)
-    subsets = generate_subsets(s)       #The results of semantic constraint partitioning are discussed
-    paruto_list = []
+    subsets = generate_subsets(s)   #The results of semantic constraint partitioning are discussed.
+    paruto_list = list()
     for i in range(len(subsets)):
         paruto_list.append([])
     """
@@ -554,12 +545,13 @@ def  SRC_LKH_main(fileName,must_per,n):
     The corresponding subset is found according to the semantic combination mode, 
     and the cost of the subset is added as the cost of the corresponding combination mode
     """
-    add_methods,add_points = find_add_method(subsets,paruto_leading_edge,paruto_leading_dis,types)
-
+    add_methods,add_points = find_add_method(subsets,paruto_leading_edge,paruto_leading_dis)
     best_tour = []
     test_points = []
+    tpn = []
     for j in must_points:
         test_points.append(points[j])
+        tpn.append(j)
     M = copy.deepcopy(test_points)
 
     """
@@ -567,9 +559,12 @@ def  SRC_LKH_main(fileName,must_per,n):
     """
     for k in add_points[0]:
         test_points.append(points[k])
-    sol, sumdis = LKH(np.array(test_points))
+        tpn.append(k)
+    sol, sumdis = LKH(tpn,C)
+
     for i in range(1, len(sol)):
-        best_tour.append([sol[i - 1], sol[i]])
+        best_tour.append([sol[i-1], sol[i]])
+
     best_fitness = copy.deepcopy(sumdis)
     best_add = copy.deepcopy(add_points[0])
     best_points = copy.deepcopy(test_points)
@@ -601,6 +596,7 @@ def  SRC_LKH_main(fileName,must_per,n):
     for i in range(n):
         l.append(i)
         random.shuffle(l)
+
     """
     The initial path is optimized by perturbation
     """
@@ -609,9 +605,11 @@ def  SRC_LKH_main(fileName,must_per,n):
             t = copy.deepcopy(best_add)
             t[i] = candidates[i][j]
             S = copy.deepcopy(M)
+            S_num = copy.deepcopy(must_points)
             for p in t:
                 S.append(points[p])
-            sol, sumdis = LKH(np.array(S))
+                S_num.append(p)
+            sol, sumdis = LKH(S_num,C)
             tour = []
             for e in range(1, len(sol)):
                 tour.append([sol[e - 1], sol[e]])
@@ -622,38 +620,51 @@ def  SRC_LKH_main(fileName,must_per,n):
                 best_tour = copy.deepcopy(tour)
             else:
                 continue
-    """
-    Draw the final path of the algorithm
-    """
-    plt_points(np.array(best_points))
+    end_time = time.time()
+    print(f"Time spent = {end_time-start_time}s")
+    print(f"Select nodes with semantics = {best_add}")
+    draw_points_type(np.array(points), init_types)
     plt_edges(best_tour, np.array(best_points), color='k')
-    bfc = best_fitness
-    plt.title(int(bfc))
-    plt.show()
     points_r = turn_points(best_points, points)
     pt = turn_tour(best_tour, points_r)
-    print(f"Select nodes with semantics = {best_add}")
-    print(f"length of path = {bfc}")
+    print(f"length of path = {best_fitness}")
     print(f"path{pt}")
+    plt.title(best_fitness)
+    plt.show()
+
 
 if __name__ == '__main__':
-    """
-    You can replace fileName with any of the data sets in the following list.
-    Specifically, you can select any dataset in the dataset/TSPLIB folder
-    ["pr76.csv","kroA100.csv","kroC100.csv","pr124.csv","pr136.csv","ch150.csv","kroA150.csv"]
-    This file records the coordinate information of each point.
-    """
-    fileName = "kroA150.csv"
+    """This file records the coordinate information and semantics of each point"""
+    Coordinate_And_Semantics = "real_data.csv"
+
+
+    """This file records the distance of the road network between any two points"""
+    Distance_Of_Road_Network = "od_distance_metrix.csv"
 
 
     """
-    You can replace percent with any of the values in the list below.
-    [0.2,0.3,0.4,0.5,0.6,0.7,0.8]
+    We set up three scenarios, and you can choose to run one of them based on your needs.
+    In dataset real_data.csv, there are seven semantically different nodes.
+    
+    Semantic 0: Aquarium,
+    Semantic 1: Family playground,
+    Semantic 2: Science and technology museum
+    Semantic 3: University campus
+    Semantic 4: Museum of traditional culture
+    Semantic 5: Pedestrian street
+    Semantic *: Mandatory node,
     """
-    percent = 0.4               #|M|=percent*(Number of nodes in data set fileName).M stands for mandatory node set.
-    semantics = 5               #There are 5 semantics in the data set
 
-    SRC_LKH_main(fileName,percent,semantics)
+    """Scenario 1:
+    In this scenario, all mandatory nodes need to be accessed. 
+    In addition, each semantic has at least one node present in the path.
+    """
+    SRC_LKH_main_scen_1(Coordinate_And_Semantics,Distance_Of_Road_Network)
+
+
+
+
+
 
 
 
